@@ -1,6 +1,6 @@
 {
   "name": "@zem-sh/terminal",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Terminal emulator core — the Ghostty VT engine compiled to WebAssembly, GPU text rendering, ligature shaping, themes and font fallback",
   "type": "module",
   "license": "MIT",
@@ -47,7 +47,6 @@
   },
   "dependencies": {
     "@webgpu/types": "^0.1.69",
-    "@zem-sh/keyboard": "^0.1.0",
     "text-shaper": "0.1.22"
   },
   "devDependencies": {

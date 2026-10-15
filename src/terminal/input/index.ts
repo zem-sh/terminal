@@ -1,4 +1,4 @@
-import { encodeBeforeInput, encodeKeyEvent, mapKeyForPty, sequences } from "@zem-sh/keyboard";
+import { encodeBeforeInput, encodeKeyEvent, mapKeyForPty, sequences } from "./keyboard";
 import { MouseController } from "./mouse";
 import { OutputFilter } from "./output/index";
 import type { InputHandler, InputHandlerConfig, InputHandlerOptions, MouseMode } from "./types";

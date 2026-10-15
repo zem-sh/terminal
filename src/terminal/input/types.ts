@@ -1,4 +1,4 @@
-import type { InputHandlerConfig } from "@zem-sh/keyboard";
+import type { InputHandlerConfig } from "./keyboard";
 
 export type { InputHandlerConfig };
 
