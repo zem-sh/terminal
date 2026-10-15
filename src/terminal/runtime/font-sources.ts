@@ -1,17 +1,6 @@
 import type { TerminalFontPreset, TerminalFontSource } from "./types";
-import {
-  FONT_URL_JETBRAINS_MONO,
-  FONT_URL_JETBRAINS_MONO_BOLD,
-  FONT_URL_JETBRAINS_MONO_ITALIC,
-  FONT_URL_JETBRAINS_MONO_BOLD_ITALIC,
-  FONT_URL_NERD_SYMBOLS,
-  FONT_URL_NOTO_SYMBOLS,
-  FONT_URL_SYMBOLA,
-  FONT_URL_NOTO_CANADIAN_ABORIGINAL,
-  FONT_URL_OPENMOJI,
-} from "../../fonts/font-urls";
 
-/** Local-first default font fallback chain with bundled fallback for JetBrains Mono, Nerd symbols, emoji, and CJK support. */
+/** Local-first default font fallback chain: JetBrains Mono, Nerd symbols, Apple Symbols, emoji and CJK from installed system fonts. */
 export const DEFAULT_FONT_SOURCES: TerminalFontSource[] = [
   {
     type: "local",
@@ -58,26 +47,6 @@ export const DEFAULT_FONT_SOURCES: TerminalFontSource[] = [
     label: "JetBrains Mono Nerd Font Bold Italic (Local)",
   },
   {
-    type: "url",
-    url: FONT_URL_JETBRAINS_MONO,
-    label: "JetBrains Mono Nerd Font Regular",
-  },
-  {
-    type: "url",
-    url: FONT_URL_JETBRAINS_MONO_BOLD,
-    label: "JetBrains Mono Nerd Font Bold",
-  },
-  {
-    type: "url",
-    url: FONT_URL_JETBRAINS_MONO_ITALIC,
-    label: "JetBrains Mono Nerd Font Italic",
-  },
-  {
-    type: "url",
-    url: FONT_URL_JETBRAINS_MONO_BOLD_ITALIC,
-    label: "JetBrains Mono Nerd Font Bold Italic",
-  },
-  {
     type: "local",
     matchers: [
       "symbols nerd font mono",
@@ -87,23 +56,11 @@ export const DEFAULT_FONT_SOURCES: TerminalFontSource[] = [
     ],
     label: "Symbols Nerd Font (Local)",
   },
-  {
-    type: "url",
-    url: FONT_URL_NERD_SYMBOLS,
-  },
   // Ghostty parity on macOS: prefer system symbols/emoji when available.
   {
     type: "local",
     matchers: ["apple symbols", "applesymbols", "apple symbols regular"],
     label: "Apple Symbols",
-  },
-  {
-    type: "url",
-    url: FONT_URL_NOTO_SYMBOLS,
-  },
-  {
-    type: "url",
-    url: FONT_URL_SYMBOLA,
   },
   {
     type: "local",
@@ -115,23 +72,13 @@ export const DEFAULT_FONT_SOURCES: TerminalFontSource[] = [
     ],
     label: "Noto Sans Canadian Aboriginal / Euphemia UCAS",
   },
-  {
-    type: "url",
-    url: FONT_URL_NOTO_CANADIAN_ABORIGINAL,
-    label: "Noto Sans Canadian Aboriginal",
-  },
-  // Emoji and CJK come from the OS — the 16MB CJK + 10MB emoji fonts were
-  // dropped from the bundle (they were pure fallbacks; see font-urls.ts).
-  // Local Font Access (Chromium opt-in) resolves these to system fonts; the
-  // bundled OpenMoji remains as the monochrome emoji fallback.
+  // Emoji and CJK come from the OS — Local Font Access (Chromium opt-in)
+  // resolves these to system fonts. Faces an app ships itself are passed in as
+  // `type: "url"` or `type: "buffer"` sources.
   {
     type: "local",
     matchers: ["apple color emoji", "applecoloremoji", "segoe ui emoji", "noto color emoji"],
     label: "Color Emoji",
-  },
-  {
-    type: "url",
-    url: FONT_URL_OPENMOJI,
   },
   {
     type: "local",
@@ -186,7 +133,7 @@ function validateFontSource(source: TerminalFontSource, index: number): Terminal
   throw new Error(`fontSources[${index}] has unsupported source type`);
 }
 
-/** Validates user-provided font sources or returns defaults based on preset (none returns empty array, otherwise default CDN fonts). */
+/** Validates user-provided font sources or returns defaults based on preset (none returns empty array, otherwise the default system-font chain). */
 export function normalizeFontSources(
   sources: TerminalFontSource[] | undefined,
   preset: TerminalFontPreset | undefined,

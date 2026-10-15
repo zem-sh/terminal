@@ -33,7 +33,6 @@
   "types": "./src/index.ts",
   "files": [
     "src",
-    "fonts",
     "assets",
     "wasm/build.zig",
     "wasm/build.zig.zon",

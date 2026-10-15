@@ -45,16 +45,8 @@ export {
 export type { DemoKind } from "./demos"
 
 export {
-  FONT_URL_JETBRAINS_MONO,
-  FONT_URL_JETBRAINS_MONO_BOLD,
-  FONT_URL_JETBRAINS_MONO_ITALIC,
-  FONT_URL_JETBRAINS_MONO_BOLD_ITALIC,
-  FONT_URL_NERD_SYMBOLS,
-  FONT_URL_NOTO_SYMBOLS,
-  FONT_URL_SYMBOLA,
-  FONT_URL_NOTO_CANADIAN_ABORIGINAL,
-  FONT_URL_OPENMOJI,
-} from "./fonts/font-urls"
+  DEFAULT_FONT_SOURCES,
+} from "./terminal/runtime/font-sources"
 
 export {
   GHOSTTY_VERSION,

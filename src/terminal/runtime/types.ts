@@ -180,10 +180,10 @@ export type TerminalFontSource = TerminalUrlFontSource | TerminalBufferFontSourc
 export type FontSource = TerminalFontSource;
 /**
  * Built-in font preset.
- * - default-cdn: load the default font from CDN
+ * - default: use the default local-first system-font chain
  * - none: do not load any preset fonts
  */
-export type TerminalFontPreset = "default-cdn" | "none";
+export type TerminalFontPreset = "default" | "none";
 /**
  * Touch-based text selection behavior.
  * - drag: immediate drag-selection on touch

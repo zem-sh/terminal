@@ -14,18 +14,12 @@ pnpm add @zem-sh/terminal
 
 The package ships TypeScript source (`src/`), not a pre-bundled artifact, so it needs a toolchain that compiles `.ts` from `node_modules` — [Vite](https://vite.dev), esbuild, webpack + ts-loader, and so on.
 
-Runtime requirements are a browser with WebGPU (WebGL2 is used as a fallback) and WASM support. The WASM core is embedded in `src/terminal/wasm/embedded.ts` as base64, so there is no separate asset to host or fetch.
+Runtime requirements are a browser with WebGPU (WebGL2 is used as a fallback) and WASM support. The WASM core is embedded in `src/terminal/wasm/embedded.ts` as base64, so there is no separate asset to host or fetch. Fonts are the app's business — see [Fonts](#fonts).
 
 ## Quick start
 
 ```ts
-import {
-  Terminal,
-  createWebSocketPtyTransport,
-  FONT_URL_JETBRAINS_MONO,
-  FONT_URL_NERD_SYMBOLS,
-  getBuiltinTheme,
-} from '@zem-sh/terminal'
+import { Terminal, createWebSocketPtyTransport, getBuiltinTheme } from '@zem-sh/terminal'
 
 // Any element with a size — the terminal fills it and resizes with it.
 const root = document.querySelector<HTMLElement>('#terminal')!
@@ -33,8 +27,14 @@ const root = document.querySelector<HTMLElement>('#terminal')!
 const terminal = new Terminal({
   root,
   fontSources: [
-    { type: 'url', label: 'JetBrains Mono', url: FONT_URL_JETBRAINS_MONO },
-    { type: 'url', label: 'Nerd Symbols', url: FONT_URL_NERD_SYMBOLS },
+    // Ship the faces your app needs. Bundlers that mirror
+    // `new URL(…, import.meta.url)` emit this as a build asset.
+    {
+      type: 'url',
+      label: 'JetBrains Mono',
+      url: new URL('./fonts/JetBrainsMonoNLNerdFontMono-Regular.ttf', import.meta.url).href,
+    },
+    { type: 'local', label: 'Nerd Symbols', matchers: ['symbols nerd font mono'] },
   ],
   appOptions: {
     // Bring your own PTY endpoint; the transport speaks the zem PTY
@@ -66,11 +66,17 @@ terminal.connectPty('ws://localhost:8080/pty', process.cwd?.())
 - **Search** — `setSearchQuery()`, `searchNext()`, `searchPrev()`, `clearSearch()`
 - **Panes** — `getSurface()`, `getActivePane()`, `getFocusedPane()`, `panes()`, `pane(id)`, `forEachPane()`
 
-Supporting exports: `createWebSocketPtyTransport`, the `FONT_URL_*` bundled font URLs, the `parseGhosttyTheme` / `listBuiltinThemeNames` / `getBuiltinTheme` theme helpers, `shaderStagesForPreset` / `shaderStagesForPresets` and the `createDemoController` demo driver.
+Supporting exports: `createWebSocketPtyTransport`, the `DEFAULT_FONT_SOURCES` fallback chain, the `parseGhosttyTheme` / `listBuiltinThemeNames` / `getBuiltinTheme` theme helpers, `shaderStagesForPreset` / `shaderStagesForPresets` and the `createDemoController` demo driver.
 
 ## Fonts
 
-Nine fonts are bundled under `fonts/` (JetBrains Mono faces, Symbols Nerd Font, Noto Sans Symbols 2, Symbola, Noto Sans Canadian Aboriginal, OpenMoji) and exposed through the `FONT_URL_*` constants. They are lazy-loaded and cached in IndexedDB by the font store; pass additional `type: 'local'` or `type: 'buffer'` sources to fill glyph gaps from system fonts or in-memory data.
+The package ships no font binaries. A terminal needs a real monospace face with the metrics a font store can parse, and the host already knows how it wants to serve and cache one, so `fontSources` is how they are supplied:
+
+- `type: 'url'` — fetched by the font store on demand and cached in IndexedDB, so a bundler-emitted asset is only downloaded once a glyph actually needs that face.
+- `type: 'local'` — resolved from installed system fonts through the Local Font Access API (Chromium, opt-in); the source is skipped when the face is unavailable.
+- `type: 'buffer'` — in-memory bytes you already have.
+
+With no `fontSources`, the terminal uses `DEFAULT_FONT_SOURCES`, a local-first chain (JetBrains Mono → Nerd symbols → Apple Symbols → emoji → CJK) that you can extend with your own faces or replace outright. Pass `fontPreset: 'none'` to start from an empty list.
 
 ## Playing with the renderer
 
