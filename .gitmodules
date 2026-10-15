@@ -1,0 +1,3 @@
+[submodule "reference/ghostty"]
+	path = reference/ghostty
+	url = https://github.com/ghostty-org/ghostty.git
