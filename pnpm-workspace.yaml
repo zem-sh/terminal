@@ -1,0 +1,4 @@
+# pnpm 11 reads all non-auth settings from this file. esbuild (via tsx) needs its
+# install script approved, otherwise pnpm refuses to run the package scripts.
+allowBuilds:
+  esbuild: true
