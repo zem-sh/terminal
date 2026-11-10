@@ -60,6 +60,17 @@ jobs:
         run: npm pack --dry-run
 
       # No NODE_AUTH_TOKEN: npm detects the GitHub Actions OIDC environment and
-      # exchanges its identity token for a short-lived publish credential.
-      - name: Publish to npm
-        run: npm publish --provenance --access public
+      # exchanges its identity token for a short-lived credential. This trusted
+      # publisher allows `npm stage publish` only, so the release is staged and
+      # a maintainer approves it with 2FA on npmjs.com to make it live.
+      - name: Stage release on npm
+        run: npm stage publish --provenance --access public
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Staged @zem-sh/terminal@$(node -p "require('./package.json').version")"
+            echo
+            echo "Approve it with 2FA at https://www.npmjs.com/package/@zem-sh/terminal"
+            echo "(Staged Packages tab), or run \`npm stage list\` / \`npm stage approve <id>\`."
+          } >> "$GITHUB_STEP_SUMMARY"
