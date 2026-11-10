@@ -7,7 +7,9 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm provenance
+  # Required for npm trusted publishing (OIDC). Provenance is generated
+  # automatically when publishing this way.
+  id-token: write
 
 concurrency:
   group: npm-publish-${{ github.ref }}
@@ -30,8 +32,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
           cache: pnpm
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.
+      - name: Upgrade npm
+        run: npm install -g npm@11
+
+      - name: Show versions
+        run: |
+          node --version
+          npm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -49,7 +59,7 @@ jobs:
       - name: Pack check
         run: npm pack --dry-run
 
+      # No NODE_AUTH_TOKEN: npm detects the GitHub Actions OIDC environment and
+      # exchanges its identity token for a short-lived publish credential.
       - name: Publish to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
