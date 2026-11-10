@@ -119,7 +119,8 @@ import {
   type RuntimeAppApiRuntime,
   type RuntimeAppApiSharedState,
 } from "./create-runtime/runtime-app-api";
-export { createTerminalAppSession, getDefaultTerminalAppSession } from "./session";
+export { createTerminalAppSession, getDefaultTerminalAppSession, prewarmTerminalCore } from "./session";
+export type { CreateTerminalAppSessionOptions } from "./session";
 export type {
   TerminalAppElements,
   TerminalAppCallbacks,
@@ -740,6 +741,10 @@ export function createTerminalApp(options: TerminalAppOptions): TerminalApp {
   let fontPromise: Promise<void> | null = null;
   let fontError: Error | null = null;
   let fontLease: TerminalFontResourceLease | null = null;
+  let deferredFontLease: TerminalFontResourceLease | null = null;
+  // Bumped whenever the configured sources change so a late (deferred or
+  // superseded) acquisition cannot install fonts into the new generation.
+  let fontGeneration = 0;
 
   setShaderStages(options.shaderStages ?? []);
 
@@ -866,9 +871,14 @@ export function createTerminalApp(options: TerminalAppOptions): TerminalApp {
   }
 
   function releaseFontLease() {
-    if (!fontLease) return;
-    fontLease.release();
-    fontLease = null;
+    if (fontLease) {
+      fontLease.release();
+      fontLease = null;
+    }
+    if (deferredFontLease) {
+      deferredFontLease.release();
+      deferredFontLease = null;
+    }
   }
 
   function clearFontRuntimeState() {
@@ -886,6 +896,7 @@ export function createTerminalApp(options: TerminalAppOptions): TerminalApp {
 
   async function setFontSources(sources: TerminalFontSource[]) {
     configuredFontSources = normalizeFontSources(sources, undefined);
+    fontGeneration += 1;
     fontPromise = null;
     fontError = null;
     releaseFontLease();
@@ -949,15 +960,80 @@ export function createTerminalApp(options: TerminalAppOptions): TerminalApp {
     appendLog(`[ui] line height ${next.toFixed(2)}`);
   }
 
+  /**
+   * Append late-loaded fallback faces (heavy symbol/emoji/CJK fonts marked
+   * `defer`) to the live font chain. Appending is safe: indices of the faces
+   * already installed do not move, and only the glyph-pick cache needs to be
+   * invalidated so previously-missing glyphs are re-resolved against the new
+   * entries on the next frame.
+   */
+  async function loadDeferredFonts(sources: TerminalFontSource[], generation: number) {
+    let lease: TerminalFontResourceLease | null = null;
+    try {
+      lease = await fontResourceStore.acquire(sources);
+    } catch {
+      return;
+    }
+    if (!lease.faces.length) {
+      lease.release();
+      return;
+    }
+    if (generation !== fontGeneration || !fontState.font) {
+      lease.release();
+      return;
+    }
+
+    releaseDeferredFontLease();
+    deferredFontLease = lease;
+
+    const entries: FontEntry[] = [];
+    for (let i = 0; i < lease.faces.length; i += 1) {
+      const face = lease.faces[i];
+      entries.push(createFontEntry(face.font, face.label));
+    }
+    if (!entries.length) return;
+
+    fontState.fonts.push(...entries);
+    fontState.fontPickCache.clear();
+    needsRender = true;
+    appendLog(`[ui] deferred fallback fonts loaded (+${entries.length})`);
+  }
+
+  function releaseDeferredFontLease() {
+    if (!deferredFontLease) return;
+    deferredFontLease.release();
+    deferredFontLease = null;
+  }
+
   async function ensureFont() {
     if (fontState.font || fontPromise) return fontPromise;
     fontPromise = (async () => {
+      const generation = fontGeneration;
+      const configured = configuredFontSources;
+      // Heavy fallback faces opt out of the critical path: paint with the
+      // primary chain first, then append them in the background. If every
+      // source is deferred (or none is), there is nothing to defer — load the
+      // whole list up front.
+      const deferredSources = configured.filter((source) => source.defer);
+      const eagerSources = configured.filter((source) => !source.defer);
+      const initialSources = eagerSources.length ? eagerSources : configured;
+
       let acquiredLease: TerminalFontResourceLease | null = null;
       try {
-        acquiredLease = await fontResourceStore.acquire(configuredFontSources);
+        acquiredLease = await fontResourceStore.acquire(initialSources);
+        if (generation !== fontGeneration) {
+          acquiredLease.release();
+          return;
+        }
         if (!acquiredLease.faces.length) {
           acquiredLease.release();
           acquiredLease = await fontResourceStore.acquire(FALLBACK_LOCAL_FONT_SOURCES);
+          // A newer font selection superseded this load while the fallback
+          // system fonts were being acquired.
+          if (generation !== fontGeneration) {
+            acquiredLease.release();
+            return;
+          }
         }
         if (!acquiredLease.faces.length) {
           throw new Error("Unable to load any configured font source.");
@@ -988,12 +1064,26 @@ export function createTerminalApp(options: TerminalAppOptions): TerminalApp {
           log("font loaded");
         }
         updateGrid();
+
+        // Start the deferred faces only after the first frame has had a
+        // chance to paint; they are usually large font files.
+        if (deferredSources.length && eagerSources.length) {
+          const startDeferred = () => {
+            void loadDeferredFonts(deferredSources, generation);
+          };
+          if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(startDeferred);
+          } else {
+            setTimeout(startDeferred, 16);
+          }
+        }
       } catch (err) {
         if (acquiredLease) {
           acquiredLease.release();
         } else {
           releaseFontLease();
         }
+        if (generation !== fontGeneration) return;
         clearFontRuntimeState();
         const error = err instanceof Error ? err : new Error(String(err));
         fontError = error;
@@ -1005,6 +1095,7 @@ export function createTerminalApp(options: TerminalAppOptions): TerminalApp {
   }
 
   cleanupFns.push(() => {
+    fontGeneration += 1;
     releaseFontLease();
     clearFontRuntimeState();
     configuredFontSources = [];

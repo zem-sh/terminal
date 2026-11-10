@@ -268,9 +268,27 @@ function createUrlByteCache(
   };
 }
 
+type LocalFontQuery = () => Promise<LocalFontFaceData[]>;
+
+/** Resolve the Local Font Access query function once per environment. */
+function resolveLocalFontQuery(): LocalFontQuery | null {
+  const globalAccess = globalThis as GlobalWithLocalFontAccess;
+  const nav = (globalAccess.navigator ??
+    (typeof navigator !== "undefined" ? navigator : undefined)) as NavigatorWithLocalFontAccess;
+  if (!nav) return null;
+  if (typeof globalAccess.queryLocalFonts === "function") {
+    return () => globalAccess.queryLocalFonts!();
+  }
+  if (typeof nav.queryLocalFonts === "function") {
+    return () => nav.queryLocalFonts!();
+  }
+  return null;
+}
+
 async function tryLoadLocalFontBuffer(
   matchers: string[],
   label: string,
+  queryFonts?: LocalFontQuery,
 ): Promise<ArrayBuffer | null> {
   const normalizedMatchers = matchers.map((matcher) => matcher.toLowerCase()).filter(Boolean);
   if (!normalizedMatchers.length) return null;
@@ -279,13 +297,8 @@ async function tryLoadLocalFontBuffer(
   const nav = (globalAccess.navigator ??
     (typeof navigator !== "undefined" ? navigator : undefined)) as NavigatorWithLocalFontAccess;
   if (!nav) return null;
-  const queryLocalFonts =
-    typeof globalAccess.queryLocalFonts === "function"
-      ? globalAccess.queryLocalFonts.bind(globalAccess)
-      : typeof nav.queryLocalFonts === "function"
-        ? nav.queryLocalFonts.bind(nav)
-        : null;
-  if (!queryLocalFonts) return null;
+  const loadFonts = queryFonts ?? resolveLocalFontQuery();
+  if (!loadFonts) return null;
 
   const sourceHint = detectStyleHint(`${label} ${normalizedMatchers.join(" ")}`);
   const queryPermission = nav.permissions?.query;
@@ -299,7 +312,7 @@ async function tryLoadLocalFontBuffer(
   }
 
   try {
-    const fonts = await queryLocalFonts();
+    const fonts = await loadFonts();
     const matches = fonts.filter((font) => {
       const name =
         `${font.family ?? ""} ${font.fullName ?? ""} ${font.postscriptName ?? ""}`.toLowerCase();
@@ -393,6 +406,16 @@ export function createTerminalFontResourceStore(
   const leaseSources = new Map<number, Map<string, number>>();
   let totalCachedSourceBytes = 0;
   let nextLeaseId = 1;
+  // Enumerating installed fonts is expensive and the same list serves every
+  // local matcher. Since sources now load concurrently, share one query per
+  // store instead of issuing one per source.
+  let localFontListPromise: Promise<LocalFontFaceData[]> | null = null;
+  const queryLocalFontList = (): Promise<LocalFontFaceData[]> => {
+    if (localFontListPromise) return localFontListPromise;
+    const query = resolveLocalFontQuery();
+    localFontListPromise = query ? query().catch(() => []) : Promise.resolve([]);
+    return localFontListPromise;
+  };
 
   const removeSourceEntry = (key: string) => {
     const entry = sourceCache.get(key);
@@ -446,6 +469,7 @@ export function createTerminalFontResourceStore(
       return await tryLoadLocalFontBuffer(
         matchers,
         source.label ?? source.matchers[0] ?? "local-font",
+        queryLocalFontList,
       );
     }
     return await loadUrlBuffer(sourceKey, normalizeUrlKey(source.url));
@@ -552,42 +576,55 @@ export function createTerminalFontResourceStore(
   };
 
   const acquire = async (sources: TerminalFontSource[]): Promise<TerminalFontResourceLease> => {
+    // Load and parse every source concurrently. The store already dedupes
+    // in-flight loads/parses; awaiting them one at a time serialized each
+    // network fetch and parse, which dominated first paint on a cold cache.
+    // `Promise.all` preserves source order, and the ordered chain matters:
+    // primary face first, fallbacks after.
+    const loaded = await Promise.all(
+      sources.map(async (source, sourceIndex) => {
+        const sourceKey = resolveSourceKey(source);
+        const baseLabel = sourceBaseLabel(source, sourceIndex);
+        let buffer: ArrayBuffer | null;
+        try {
+          buffer = await loadSourceBufferCached(source, sourceKey);
+        } catch {
+          buffer = null;
+        }
+
+        if (!buffer) {
+          if (source.type === "local") {
+            const prefix = source.required
+              ? "required local font missing"
+              : "optional local font missing";
+            console.warn(`[font] ${prefix} (${source.matchers.join(", ")})`);
+          }
+          return null;
+        }
+
+        let parsedFaces: ParsedFontFace[];
+        try {
+          parsedFaces = await parseSourceFacesCached(sourceKey, buffer);
+        } catch {
+          parsedFaces = [];
+        }
+        if (!parsedFaces.length) return null;
+        return { sourceKey, baseLabel, parsedFaces };
+      }),
+    );
+
     const faces: TerminalFontResourceFace[] = [];
     const sourceRefs = new Map<string, number>();
-
-    for (let sourceIndex = 0; sourceIndex < sources.length; sourceIndex += 1) {
-      const source = sources[sourceIndex];
-      const sourceKey = resolveSourceKey(source);
-      const baseLabel = sourceBaseLabel(source, sourceIndex);
-      let buffer: ArrayBuffer | null;
-      try {
-        buffer = await loadSourceBufferCached(source, sourceKey);
-      } catch {
-        buffer = null;
-      }
-
-      if (!buffer) {
-        if (source.type === "local") {
-          const prefix = source.required
-            ? "required local font missing"
-            : "optional local font missing";
-          console.warn(`[font] ${prefix} (${source.matchers.join(", ")})`);
-        }
-        continue;
-      }
-
-      let parsedFaces: ParsedFontFace[];
-      try {
-        parsedFaces = await parseSourceFacesCached(sourceKey, buffer);
-      } catch {
-        parsedFaces = [];
-      }
-      if (!parsedFaces.length) continue;
+    const usedAt = now();
+    for (let sourceIndex = 0; sourceIndex < loaded.length; sourceIndex += 1) {
+      const result = loaded[sourceIndex];
+      if (!result) continue;
+      const { sourceKey, baseLabel, parsedFaces } = result;
 
       const sourceEntry = sourceCache.get(sourceKey);
       if (sourceEntry) {
         sourceEntry.refCount += 1;
-        sourceEntry.lastUsedAt = now();
+        sourceEntry.lastUsedAt = usedAt;
       }
       sourceRefs.set(sourceKey, (sourceRefs.get(sourceKey) ?? 0) + 1);
 

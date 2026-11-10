@@ -1,5 +1,4 @@
-import { decodeBase64Bytes } from "../../utils/base64";
-import { WASM_BASE64 } from "../embedded";
+import { TERMINAL_WASM_URL } from "../wasm-asset";
 import { resolveWasmAbi } from "./abi";
 import { readKittyPlacements } from "./kitty";
 import { readRenderState } from "./render-state";
@@ -45,9 +44,9 @@ export class TerminalWasm {
     this.renderViewCaches = new Map();
   }
 
-  /** Load and instantiate the embedded WASM module. */
+  /** Load and instantiate the terminal WASM module. */
   static async load(options: TerminalWasmOptions = {}): Promise<TerminalWasm> {
-    const bytes = decodeBase64Bytes(WASM_BASE64);
+    const bytes = await loadWasmBytes(options.wasmUrl);
     let memory: WebAssembly.Memory | null = null;
     const log = options.log;
 
@@ -282,7 +281,25 @@ export class TerminalWasm {
   }
 }
 
-/** Load and instantiate the embedded WASM module (convenience function). */
+/** Load and instantiate the terminal WASM module (convenience function). */
 export async function loadTerminalWasm(options: TerminalWasmOptions = {}): Promise<TerminalWasm> {
   return TerminalWasm.load(options);
+}
+
+/**
+ * Fetch the WASM binary from its asset URL. The binary is a separate asset
+ * rather than an embedded base64 string so browsers can cache and compile it
+ * independently, and the JS bundle stays out of the multi-megabyte range.
+ */
+async function loadWasmBytes(wasmUrl?: string): Promise<BufferSource> {
+  const url = wasmUrl ?? TERMINAL_WASM_URL;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`failed to load terminal WASM from ${url}: HTTP ${response.status}`);
+  }
+  const buffer = await response.arrayBuffer();
+  if (!buffer.byteLength) {
+    throw new Error(`terminal WASM asset is empty: ${url}`);
+  }
+  return buffer;
 }

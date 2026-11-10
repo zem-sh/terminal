@@ -176,6 +176,11 @@ export type TerminalWasmExports = WebAssembly.Exports & {
 /** Construction options for WASM runtime. */
 export type TerminalWasmOptions = {
   log?: (message: string) => void;
+  /**
+   * URL of the `terminal.wasm` asset. Defaults to the copy shipped in the
+   * package's `assets` directory (resolved by the bundler).
+   */
+  wasmUrl?: string;
 };
 
 export type RenderPtrs = {

@@ -31,7 +31,16 @@ export type {
   TerminalShaderStageMode,
   TerminalShaderStageBackend,
   TerminalShaderStageSource,
+  TerminalAppSession,
 } from "./terminal/runtime/types"
+
+export {
+  createTerminalAppSession,
+  getDefaultTerminalAppSession,
+  prewarmTerminalCore,
+} from "./terminal/runtime/session"
+export type { CreateTerminalAppSessionOptions } from "./terminal/runtime/session"
+export { TERMINAL_WASM_URL } from "./terminal/wasm/wasm-asset"
 
 export {
   shaderStagesForPreset,
@@ -56,7 +65,7 @@ export {
   TERMINAL_WASM_OPTIMIZE,
   TERMINAL_WASM_SIZE,
   TERMINAL_WASM_SHA256,
-} from "./terminal/wasm/embedded"
+} from "./terminal/wasm/metadata"
 
 // Theme APIs
 export type { ThemeColor, ThemeTerminalColor, GhosttyTheme } from "./theme/ghostty"

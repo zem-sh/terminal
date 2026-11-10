@@ -147,6 +147,12 @@ export type TerminalUrlFontSource = {
   url: string;
   /** Human-readable label for debug/log output. */
   label?: string;
+  /**
+   * Load after the first frame instead of blocking startup. Use for large,
+   * rarely-needed fallback faces (symbol/emoji/CJK); the primary chain must
+   * stay eager.
+   */
+  defer?: boolean;
 };
 
 /** Font source loaded from an in-memory buffer. */
@@ -156,6 +162,8 @@ export type TerminalBufferFontSource = {
   data: TerminalFontBufferData;
   /** Human-readable label for debug/log output. */
   label?: string;
+  /** Load after the first frame instead of blocking startup. */
+  defer?: boolean;
 };
 
 /** Font source resolved from locally installed fonts via the Local Font Access API. */
@@ -167,6 +175,8 @@ export type TerminalLocalFontSource = {
   label?: string;
   /** If true, font loading fails when no local match is found. */
   required?: boolean;
+  /** Load after the first frame instead of blocking startup. */
+  defer?: boolean;
 };
 
 /**

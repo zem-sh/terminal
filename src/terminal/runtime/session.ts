@@ -3,12 +3,19 @@ import { loadTerminalWasm, type TerminalWasm } from "../wasm";
 import { createTerminalFontResourceStore } from "./font-resource-store";
 import type { TerminalAppSession, TerminalWasmLogListener } from "./types";
 
+export type CreateTerminalAppSessionOptions = {
+  /** URL of the `terminal.wasm` asset; defaults to the bundled package asset. */
+  wasmUrl?: string;
+};
+
 /**
  * Create a new app session that lazily loads the WASM module and
  * initializes the WebGPU core on first use. Multiple panes can
  * share a single session to avoid duplicate resource loading.
  */
-export function createTerminalAppSession(): TerminalAppSession {
+export function createTerminalAppSession(
+  options: CreateTerminalAppSessionOptions = {},
+): TerminalAppSession {
   let wasmPromise: Promise<TerminalWasm> | null = null;
   let webgpuCorePromise: Promise<WebGPUCoreState | null> | null = null;
   const wasmLogListeners = new Set<TerminalWasmLogListener>();
@@ -23,7 +30,7 @@ export function createTerminalAppSession(): TerminalAppSession {
   return {
     getWasm: () => {
       if (!wasmPromise) {
-        wasmPromise = loadTerminalWasm({ log: forwardWasmLog });
+        wasmPromise = loadTerminalWasm({ log: forwardWasmLog, wasmUrl: options.wasmUrl });
       }
       return wasmPromise;
     },
@@ -54,4 +61,12 @@ export function getDefaultTerminalAppSession(): TerminalAppSession {
     defaultTerminalAppSession = createTerminalAppSession();
   }
   return defaultTerminalAppSession;
+}
+
+/**
+ * Start loading (and compiling) the terminal WASM core for a session ahead of
+ * the first pane. Idempotent — the session caches its in-flight load.
+ */
+export function prewarmTerminalCore(session?: TerminalAppSession): Promise<TerminalWasm> {
+  return (session ?? getDefaultTerminalAppSession()).getWasm();
 }
