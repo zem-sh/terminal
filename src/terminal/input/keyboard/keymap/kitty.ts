@@ -143,6 +143,19 @@ function encodeKittySequence(
 }
 
 export function encodeKittyKeyEvent(event: KeyboardEvent, kittyFlags: number): string {
+  // Preserve the conventional terminal interrupt byte even when an app has
+  // enabled Kitty keyboard reporting. Older TTY programs may echo CSI-u input.
+  if (
+    event.type === "keydown" &&
+    event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    event.key?.toLowerCase() === "c"
+  ) {
+    return "\x03";
+  }
+
   const reportEvents = (kittyFlags & KITTY_FLAG_REPORT_EVENTS) !== 0;
   const reportAlternate = (kittyFlags & KITTY_FLAG_REPORT_ALTERNATE) !== 0;
   const reportAll = (kittyFlags & KITTY_FLAG_REPORT_ALL) !== 0;
